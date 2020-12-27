@@ -44,76 +44,111 @@ def gen_juku_sample_list(level):
 
 
 def gen_shuffled_grid(juku_sample_list):
-    ''' Shuffles the jukugos around and returns '''
+    ''' Shuffles the jukugos around and returns a list of lists
+    the inner lists contains the kanji and the state so ['漢',0]
+    if the kanji is unpressed and uncompleted.'''
     new_list = []
     for word in juku_sample_list:
-        new_list.append(word[0])
-        new_list.append(word[1])
-        new_list.append(word[2])
+        new_list.append([word[0], 0])
+        new_list.append([word[1], 0])
+        new_list.append([word[2], 0])
     random.shuffle(new_list)
     return new_list
 
 
-def get_cols(level):
-    '''gets number of columns depending on level'''
+def stage_dimensions(level):
+    ''' returns num of rows and columns'''
     if level == 0:
-        return 4
+        return 4, 1
     if level == 1:
-        return 6
+        return 6, 1
     if level == 2:
-        return 4
+        return 4, 2
     if level == 3:
-        return 5
-    return 6
+        return 5, 2
+    return 6, 2
 
 
-def get_rows(level):
-    '''gets number of rows depending on level'''
-    if level == 0:
-        return 1
-    if level == 1:
-        return 1
-    if level == 2:
-        return 2
-    if level == 3:
-        return 2
-    return 2
+class Chip:
+    ''' Abstraction of the kanji chip, which contains position
+    coordinate corresponding to upper left corner, the kanji,
+    and the status (0=uncompleted,unclicked, 1=clicked, 2=completed)'''
+    def __init__(self, x_pos, y_pos, kanji, status):
+        self.x_pos = x_pos
+        self.y_pos = y_pos
+        self.kanji = kanji
+        self.status = status
+
+    def set_pos(self, new_x, new_y):
+        '''Updated position'''
+        self.x_pos = new_x
+        self.y_pos = new_y
+
+    def get_pos(self):
+        '''Returns position'''
+        return [self.x_pos, self.y_pos]
+
+    def __str__(self):
+        return "Coordinates: " + str(self.x_pos) + ", " + \
+                                 str(self.y_pos) + ", " + \
+                "Kanji: " + self.kanji + ", Status: " + str(self.status)
+
+
+def gen_chip_array(juku_sample_list, level, num_cols, num_rows):
+    '''Returns a list of chip objects with corresponding kanji, position
+    and status'''
+    # calculate corners of box containing columns and rows
+    corner_x_left = WIDTH/2 - (CHIP_W*num_cols/2 +
+                               PADDING_BETWEEN_COLUMNS*(num_cols/2 - 1) +
+                               PADDING_BETWEEN_COLUMNS/2)
+    corner_y_up = HEIGHT/2 - CHIP_W*(1.5 + 2*(num_rows - 1))
+
+    # Initialize list of coordinates
+    pos_list = []
+
+    # Add coordinates to list
+    for i in range(level*2 + 4): # column
+        if i >= num_cols:
+            for j in range(3): # print kanjis in second row
+                pos = [corner_x_left + (i%num_cols)*(PADDING_BETWEEN_COLUMNS + CHIP_W), 
+                       corner_y_up + j*(CHIP_W) + 4*CHIP_W]
+                pos_list.append(pos) # add coordinate to list
+        else:
+            for j in range(3): # print kanjis in first row
+                pos = [corner_x_left + i*(PADDING_BETWEEN_COLUMNS + CHIP_W),
+                       corner_y_up + j*(CHIP_W)]
+                pos_list.append(pos) # add coordinate to list
+
+    # Initialize list of kanjis
+    kanji_list = []
+
+    # Add kanjis to list
+    for word in juku_sample_list:
+        kanji_list.append(word[0])
+        kanji_list.append(word[1])
+        kanji_list.append(word[2])
+
+    # Shuffle list of kanjis
+    random.shuffle(kanji_list)
+
+    # Initialize list of chips
+    chip_array = []
+
+    # Add chips with coordinates, kanjis and statuses to list
+    for i in range(len(pos_list)):
+        chip_array.append(Chip(pos_list[i][0], pos_list[i][1], kanji_list[i], 0))
+
+    # Return the final array
+    return chip_array
 
 
 class Stage:
     ''' Abstraction of the current stage, also handles actions'''
     def __init__(self, level):
         self.level = level
-        self.num_cols = get_cols(level)
-        self.num_rows = get_rows(level)
+        self.num_cols, self.num_rows = stage_dimensions(level)
         self.juku = gen_juku_sample_list(level)
-        self.grid = gen_shuffled_grid(self.juku)
-        self.marked_positions = []
-        self.kanji_pos_array = self.gen_kanji_pos_array()
-        #print(self.kanji_pos_array)
-        #print(f"self.juku: {self.juku}\nself.grid: {self.grid}")
-
-    def gen_kanji_pos_array(self):
-        '''Generates an array of positions from upper left corner of chip'''
-        re_array = []
-        # calculate corners of box containing columns and rows
-        corner_x_left = WIDTH/2 - (CHIP_W*self.num_cols/2 +
-                                   PADDING_BETWEEN_COLUMNS*(self.num_cols/2 - 1) +
-                                   PADDING_BETWEEN_COLUMNS/2)
-        corner_y_up = HEIGHT/2 - CHIP_W*(1.5 + 2*(self.num_rows - 1))
-        # add coordinates
-        for i in range(self.level*2 + 4): # column
-            if i >= self.num_cols:
-                for j in range(3): # print kanjis in second row
-                    pos = [corner_x_left + (i%self.num_cols)*(PADDING_BETWEEN_COLUMNS + CHIP_W), 
-                           corner_y_up + j*(CHIP_W) + 4*CHIP_W]
-                    re_array.append(pos) # add coordinate to list
-            else:
-                for j in range(3): # print kanjis in first row
-                    pos = [corner_x_left + i*(PADDING_BETWEEN_COLUMNS + CHIP_W),
-                           corner_y_up + j*(CHIP_W)]
-                    re_array.append(pos) # add coordinate to list
-        return re_array
+        self.chips = gen_chip_array(self.juku, self.level, self.num_cols, self.num_rows)
 
     def draw(self):
         ''' draws everything'''
@@ -122,36 +157,37 @@ class Stage:
         if self.level == 0:
             draw_text(60, HEIGHT - 30, "漢字を入れ替えて三字熟語を完成させよう！", 20, '#444444')
 
-        # draw kanjis
-        for i in range(len(self.grid)):
+        # draw chips
+        for i in range(len(self.chips)):
+            # box
+            pygame.draw.rect(WIN, BLACK, pygame.Rect(self.chips[i].x_pos,
+                                                     self.chips[i].y_pos, CHIP_W - 2, CHIP_W - 2)
+                             , 1)
+            # box fill
+            if self.chips[i].status == 1:
+                pygame.draw.rect(WIN, '#aaee00', pygame.Rect(self.chips[i].x_pos,
+                                                             self.chips[i].y_pos,
+                                                             CHIP_W - 3,
+                                                             CHIP_W - 3))
             # kanji
-            draw_text(self.kanji_pos_array[i][0] + CHIP_PAD,
-                      self.kanji_pos_array[i][1] + CHIP_PAD,
-                      self.grid[i], CHIP_W - 2*CHIP_PAD, BLACK)
-            # upper line
-            pygame.draw.line(WIN, BLACK, (self.kanji_pos_array[i][0], self.kanji_pos_array[i][1]),
-                             (self.kanji_pos_array[i][0] + CHIP_W, self.kanji_pos_array[i][1]))
-            # bottom line
-            pygame.draw.line(WIN, BLACK, (self.kanji_pos_array[i][0], self.kanji_pos_array[i][1] + CHIP_W),
-                             (self.kanji_pos_array[i][0] + CHIP_W, self.kanji_pos_array[i][1] + CHIP_W))
-            # left line
-            pygame.draw.line(WIN, BLACK, (self.kanji_pos_array[i][0], self.kanji_pos_array[i][1]),
-                             (self.kanji_pos_array[i][0], self.kanji_pos_array[i][1] + CHIP_W))
-            # right line
-            pygame.draw.line(WIN, BLACK, (self.kanji_pos_array[i][0] + CHIP_W, self.kanji_pos_array[i][1]),
-                             (self.kanji_pos_array[i][0] + CHIP_W, self.kanji_pos_array[i][1] + CHIP_W))
+            draw_text(self.chips[i].x_pos + CHIP_PAD,
+                      self.chips[i].y_pos + CHIP_PAD,
+                      self.chips[i].kanji, CHIP_W - 2 * CHIP_PAD, BLACK)
 
 
 def click(s):
+    '''Function that runs whenever you click the screen'''
     # Mouse pos
     m_x, m_y = pygame.mouse.get_pos()
     print(f"Click! x pos is: {m_x}, y pos is: {m_y}")
-    for i in range(len(s.kanji_pos_array)): # 0 till 11 om len = 12
-        if m_x > s.kanji_pos_array[i][0] and m_x < (s.kanji_pos_array[i][0] + CHIP_W):
-            if m_y > s.kanji_pos_array[i][1] and m_y < (s.kanji_pos_array[i][1] + CHIP_W):
-                #s.kanji_pos_array[i][0] = s.kanji_pos_array[i][0] + 10
-                #s.kanji_pos_array[i][1] = s.kanji_pos_array[i][1] + 10
+    for i in range(len(s.chips)): # 0 till 11 om len = 12
+        if m_x > s.chips[i].x_pos and m_x < (s.chips[i].x_pos + CHIP_W):
+            if m_y > s.chips[i].y_pos and m_y < (s.chips[i].y_pos + CHIP_W):
                 print(f"A click was registered on tile no: {i}")
+                if s.chips[i].status == 0:
+                    s.chips[i].status = 1
+                elif s.chips[i].status == 1:
+                    s.chips[i].status = 0
 
 
 def render(s):
@@ -161,8 +197,8 @@ def render(s):
 
 
 def main():
-    s = Stage(2) # Init stage
-    run = True # Turn on game
+    s = Stage(1)
+    run = True
 
     while run:
         for event in pygame.event.get():
